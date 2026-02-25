@@ -5,6 +5,9 @@ Nylaris – Streamlit dashboard for checking stock signal details.
 
 Run with:
     streamlit run nylaris/ui.py
+
+    # or from the repo root:
+    streamlit run streamlit_app.py
 """
 
 from __future__ import annotations
@@ -13,6 +16,14 @@ import sys
 import os
 from pathlib import Path
 
+# Ensure the repo root is on sys.path so `nylaris.*` imports work
+# whether this file is run as `streamlit run nylaris/ui.py` or from the root.
+_HERE = Path(__file__).resolve().parent
+_ROOT = _HERE.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -27,21 +38,93 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Sidebar – settings
+# Demo-data generator
 # ---------------------------------------------------------------------------
 
-st.sidebar.title("⚙️ Settings")
-
-DEFAULT_TICKERS = [
+_DEMO_TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
     "META", "TSLA", "BRK-B", "JPM", "JNJ",
     "V", "UNH", "XOM", "PG", "HD",
 ]
 
+@st.cache_data(show_spinner=False)
+def _generate_demo_data() -> pd.DataFrame:
+    """
+    Generate synthetic OHLCV + signal score data so the dashboard renders
+    immediately without downloading any real market data.
+    """
+    rng = np.random.default_rng(42)
+    dates = pd.date_range(end=pd.Timestamp.today().normalize(), periods=504, freq="B")
+    frames = []
+    for ticker in _DEMO_TICKERS:
+        n = len(dates)
+        start_price = rng.uniform(50, 500)
+        log_returns = rng.normal(0.0004, 0.015, n)
+        prices = start_price * np.exp(np.cumsum(log_returns))
+
+        sma_50 = pd.Series(prices).rolling(50, min_periods=1).mean().values
+        sma_200 = pd.Series(prices).rolling(200, min_periods=1).mean().values
+        atr_pct = rng.uniform(0.008, 0.04, n)
+
+        p200_norm = np.clip((prices / sma_200 - 0.8) / 0.4, 0, 1)
+        mac_norm = np.clip((sma_50 / sma_200 - 0.9) / 0.2, 0, 1)
+        atr_norm = 1 - np.clip((atr_pct - 0.008) / 0.032, 0, 1)
+        trend_score = np.clip(0.40 * p200_norm + 0.40 * mac_norm + 0.20 * atr_norm, 0, 1)
+
+        rsi_vals = np.clip(rng.normal(55, 15, n), 0, 100) / 100
+        r3m = np.clip(rng.normal(0.05, 0.12, n), -0.5, 0.5)
+        r3m_norm = np.clip((r3m + 0.5) / 1.0, 0, 1)
+        momentum_score = np.clip(0.40 * rsi_vals + 0.60 * r3m_norm, 0, 1)
+
+        sentiment_score = np.clip(rng.normal(0.5, 0.1, n), 0, 1)
+        composite_score = np.clip(0.5 * trend_score + 0.5 * momentum_score, 0, 1)
+
+        vol_labels = np.where(atr_pct > 0.028, "high",
+                     np.where(atr_pct > 0.018, "medium", "low"))
+
+        frames.append(pd.DataFrame({
+            "date": dates,
+            "ticker": ticker,
+            "open": prices * rng.uniform(0.995, 1.0, n),
+            "high": prices * rng.uniform(1.005, 1.02, n),
+            "low": prices * rng.uniform(0.98, 0.995, n),
+            "close": prices,
+            "volume": rng.integers(5_000_000, 80_000_000, n),
+            "sma_50": sma_50,
+            "sma_200": sma_200,
+            "atr_pct": atr_pct,
+            "trend_score": trend_score,
+            "momentum_score": momentum_score,
+            "sentiment_score": sentiment_score,
+            "fundamental_score": np.clip(rng.normal(0.5, 0.15, n), 0, 1),
+            "composite_score": composite_score,
+            "volatility_regime": vol_labels,
+        }))
+
+    df = pd.concat(frames, ignore_index=True)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.sort_values(["ticker", "date"]).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# Sidebar – settings
+# ---------------------------------------------------------------------------
+
+st.sidebar.title("⚙️ Settings")
+
+DEFAULT_TICKERS = _DEMO_TICKERS
+
+demo_mode = st.sidebar.toggle(
+    "🎲 Use demo data",
+    value=True,
+    help="Load synthetic data instantly without downloading from Yahoo Finance",
+)
+
 tickers_input = st.sidebar.text_area(
     "Tickers (one per line or comma-separated)",
     value="\n".join(DEFAULT_TICKERS),
     height=220,
+    disabled=demo_mode,
 )
 tickers = [t.strip().upper() for t in tickers_input.replace(",", "\n").splitlines() if t.strip()]
 
@@ -50,16 +133,24 @@ mode = st.sidebar.selectbox(
     options=["phase1", "full"],
     index=0,
     help="phase1 uses only trend + momentum; full adds fundamentals & sentiment",
+    disabled=demo_mode,
 )
 
 force_refresh = st.sidebar.checkbox(
     "Force refresh cached data",
     value=False,
     help="Re-download market data from Yahoo Finance",
+    disabled=demo_mode,
 )
 
 st.sidebar.markdown("---")
-run_button = st.sidebar.button("▶ Run Pipeline", type="primary", use_container_width=True)
+run_button = st.sidebar.button(
+    "▶ Run Pipeline",
+    type="primary",
+    use_container_width=True,
+    disabled=demo_mode,
+    help="Disable demo mode above to run the real pipeline",
+)
 
 # ---------------------------------------------------------------------------
 # Main content
@@ -112,13 +203,23 @@ def _build_snapshot(df: pd.DataFrame) -> pd.DataFrame:
     return build_snapshot(df)
 
 
+# ---------------------------------------------------------------------------
+# Load / compute data
+# ---------------------------------------------------------------------------
+
 # State management
 if "scored_df" not in st.session_state:
     st.session_state.scored_df = None
 if "snapshot" not in st.session_state:
     st.session_state.snapshot = None
 
-if run_button:
+if demo_mode:
+    # Auto-load demo data immediately — no button click required
+    demo_df = _generate_demo_data()
+    st.session_state.scored_df = demo_df
+    st.session_state.snapshot = _build_snapshot(demo_df)
+    st.sidebar.success("Demo data loaded ✓")
+elif run_button:
     with st.spinner("Running pipeline… this may take a minute on first run."):
         try:
             df = _run_pipeline(tuple(tickers), mode, force_refresh)
@@ -137,6 +238,12 @@ if run_button:
 
 if st.session_state.snapshot is not None:
     snap: pd.DataFrame = st.session_state.snapshot
+
+    if demo_mode:
+        st.info(
+            "🎲 **Demo mode** — showing synthetic data. "
+            "Toggle off **Use demo data** in the sidebar and click **▶ Run Pipeline** for real market data."
+        )
 
     st.subheader("🏆 Ranked Snapshot")
     st.caption("Latest-date scores for each ticker, sorted by composite score (highest first)")
@@ -276,10 +383,11 @@ if st.session_state.snapshot is not None:
                 st.line_chart(ticker_df.set_index("date")["composite_score"])
 
 else:
-    st.info(
-        "👈 Configure your settings in the sidebar, then click **▶ Run Pipeline** to load data and compute scores."
-    )
-    st.markdown("""
+    if not demo_mode:
+        st.info(
+            "👈 Configure your settings in the sidebar, then click **▶ Run Pipeline** to load data and compute scores."
+        )
+        st.markdown("""
 ### How it works
 
 | Step | Description |
