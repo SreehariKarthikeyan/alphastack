@@ -1,6 +1,8 @@
 # alphastack — Nylaris Signal Engine
 
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py)
+[![Netlify Status](https://api.netlify.com/api/v1/badges/placeholder/deploy-status)](https://app.netlify.com/sites/placeholder/deploys)
+<!-- ⬆ Replace `placeholder` with your Netlify site ID after the first deploy -->
 
 A quantitative stock-scoring engine that ranks equities using trend, momentum, sentiment, and fundamental signals and exposes results via a web dashboard and a CLI.
 
@@ -115,6 +117,43 @@ alphastack/
 
 > **Data cache** — downloaded market data is stored in `nylaris_data/` (git-ignored).  
 > Delete this folder or use `--refresh` to force a fresh download.
+
+---
+
+## Netlify Portfolio Integration
+
+The repository ships two files that make it straightforward to embed the live Streamlit dashboard inside a Netlify-hosted portfolio website.
+
+| File | Purpose |
+|------|---------|
+| `index.html` | Static portfolio landing page — contains the project description and an `<iframe>` that loads the Streamlit Cloud app |
+| `netlify.toml` | Netlify build/deploy config — sets the publish directory, security headers, and a `/app` redirect to the Streamlit Cloud URL |
+
+### Deploying to Netlify
+
+**Option A — Netlify UI (drag-and-drop)**
+
+1. Open [Netlify](https://app.netlify.com) and create a new site.
+2. Drag the repo folder onto the Netlify deploy drop-zone, **or** connect the GitHub repository.
+3. Netlify will automatically pick up `netlify.toml`; set **Publish directory** to `.` (repo root) if it is not detected.
+
+**Option B — Netlify CLI**
+
+```bash
+npm install -g netlify-cli
+netlify login
+netlify deploy --dir . --prod
+```
+
+**Option C — Connect to GitHub**
+
+1. In Netlify go to **Add new site → Import an existing project**.
+2. Authorise the GitHub integration and select `SreehariKarthikeyan/alphastack`.
+3. Leave **Build command** empty and set **Publish directory** to `.`.
+4. Click **Deploy site** — Netlify will serve `index.html` and honour the rules in `netlify.toml` on every push.
+
+> **Note** — The Streamlit app itself still runs on **Streamlit Cloud** (Python cannot execute on Netlify).  
+> `index.html` embeds it via `<iframe>`; the `/app` route in `netlify.toml` provides a direct redirect for users who prefer the full-screen experience.
 
 ---
 
