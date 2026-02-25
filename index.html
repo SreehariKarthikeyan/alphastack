@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nylaris Signal Engine — Sreehari Karthikeyan</title>
+  <meta name="description" content="Nylaris is a quantitative stock-scoring engine that ranks equities using trend, momentum, sentiment, and fundamental signals." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0e1117;
+      --surface: #1a1d27;
+      --border: #2d3248;
+      --accent: #4f8ef7;
+      --accent-hover: #6ba3ff;
+      --text: #e8eaf0;
+      --muted: #8b8fa8;
+      --green: #21c55d;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .logo-icon { font-size: 1.5rem; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+
+    .badge:hover { opacity: 0.85; }
+
+    .badge-live {
+      background: rgba(33, 197, 93, 0.15);
+      border: 1px solid rgba(33, 197, 93, 0.4);
+      color: var(--green);
+    }
+
+    .badge-live::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 48px 32px 32px;
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .hero h1 {
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -0.5px;
+    }
+
+    .hero h1 span { color: var(--accent); }
+
+    .hero p {
+      margin-top: 14px;
+      font-size: 1.05rem;
+      color: var(--muted);
+      line-height: 1.65;
+      max-width: 620px;
+    }
+
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 22px;
+      border-radius: var(--radius);
+      font-size: 0.92rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: filter 0.2s, transform 0.15s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    /* ── Pill tags ── */
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    .tag {
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      background: rgba(79, 142, 247, 0.12);
+      border: 1px solid rgba(79, 142, 247, 0.3);
+      color: var(--accent-hover);
+    }
+
+    /* ── App frame ── */
+    .frame-wrapper {
+      flex: 1;
+      padding: 0 32px 40px;
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .frame-card {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    .frame-title-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .dots { display: flex; gap: 6px; }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .dot-red    { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green  { background: #28c840; }
+
+    .frame-url {
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: rgba(255,255,255,0.05);
+      padding: 4px 12px;
+      border-radius: 6px;
+    }
+
+    .frame-actions { display: flex; gap: 8px; }
+
+    .frame-link {
+      font-size: 0.75rem;
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .frame-link:hover { text-decoration: underline; }
+
+    iframe.app-frame {
+      display: block;
+      width: 100%;
+      height: 700px;
+      border: none;
+      background: var(--bg);
+    }
+
+    /* ── Stats row ── */
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: 0 32px 24px;
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .stat-card {
+      flex: 1 1 160px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+
+    .stat-value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 20px 32px;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      header { padding: 14px 16px; }
+      .hero, .frame-wrapper, .stats { padding-left: 16px; padding-right: 16px; }
+      iframe.app-frame { height: 500px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <a class="logo" href="#">
+      <span class="logo-icon">📈</span>
+      Nylaris
+    </a>
+    <a class="badge badge-live"
+       href="https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py"
+       target="_blank" rel="noopener noreferrer">
+      Live App
+    </a>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1>Quantitative <span>Stock Scoring</span><br>Signal Engine</h1>
+    <p>
+      Nylaris ranks equities using trend, momentum, sentiment, and fundamental
+      signals — giving you a data-driven composite score to guide investment
+      decisions.
+    </p>
+
+    <div class="cta-row">
+      <a class="btn btn-primary"
+         href="https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py"
+         target="_blank" rel="noopener noreferrer">
+        🚀 Open Full App
+      </a>
+      <a class="btn btn-secondary"
+         href="https://github.com/SreehariKarthikeyan/alphastack"
+         target="_blank" rel="noopener noreferrer">
+        ⭐ View Source
+      </a>
+    </div>
+
+    <div class="tags">
+      <span class="tag">Python</span>
+      <span class="tag">Streamlit</span>
+      <span class="tag">Quantitative Finance</span>
+      <span class="tag">yfinance</span>
+      <span class="tag">Plotly</span>
+      <span class="tag">Backtest Engine</span>
+    </div>
+  </section>
+
+  <!-- Stat cards -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-value">15+</div>
+      <div class="stat-label">Default tickers scored</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">4</div>
+      <div class="stat-label">Signal dimensions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">5yr</div>
+      <div class="stat-label">Historical data window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">Live</div>
+      <div class="stat-label">Streamlit deployment</div>
+    </div>
+  </div>
+
+  <!-- Embedded App Frame -->
+  <div class="frame-wrapper">
+    <div class="frame-card">
+      <div class="frame-title-bar">
+        <div class="dots">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+        </div>
+        <div class="frame-url">nylaris — signal engine</div>
+        <div class="frame-actions">
+          <a class="frame-link"
+             href="https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py"
+             target="_blank" rel="noopener noreferrer">
+            Open in new tab ↗
+          </a>
+        </div>
+      </div>
+      <iframe
+        class="app-frame"
+        src="https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py"
+        title="Nylaris Signal Engine"
+        loading="lazy"
+        allow="clipboard-write"
+      ></iframe>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    Built by
+    <a href="https://github.com/SreehariKarthikeyan" target="_blank" rel="noopener noreferrer">
+      Sreehari Karthikeyan
+    </a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/SreehariKarthikeyan/alphastack" target="_blank" rel="noopener noreferrer">
+      GitHub
+    </a>
+    &nbsp;·&nbsp; Deployed on Netlify + Streamlit Community Cloud
+  </footer>
+
+</body>
+</html>

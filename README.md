@@ -1,6 +1,7 @@
 # alphastack — Nylaris Signal Engine
 
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/SreehariKarthikeyan/alphastack)
 
 A quantitative stock-scoring engine that ranks equities using trend, momentum, sentiment, and fundamental signals and exposes results via a web dashboard and a CLI.
 
@@ -115,6 +116,40 @@ alphastack/
 
 > **Data cache** — downloaded market data is stored in `nylaris_data/` (git-ignored).  
 > Delete this folder or use `--refresh` to force a fresh download.
+
+---
+
+## Netlify Portfolio Integration
+
+The repository includes a static portfolio landing page (`index.html`) and a
+`netlify.toml` configuration so the project page can be hosted on
+[Netlify](https://netlify.com) alongside your personal portfolio.
+
+### What it includes
+
+| File | Purpose |
+|------|---------|
+| `index.html` | Dark-themed portfolio page with an iframe embed of the live Streamlit app |
+| `netlify.toml` | Netlify build settings and security headers |
+
+### Deploy to Netlify
+
+**Option A — One-click deploy**
+
+Click the "Deploy to Netlify" button at the top of this README.
+
+**Option B — Manual deploy**
+
+1. Push this repository to GitHub (already done).
+2. Log in to [netlify.com](https://app.netlify.com) → **Add new site → Import an existing project**.
+3. Select your GitHub repository and configure:
+   - **Build command**: *(leave blank — static site)*
+   - **Publish directory**: `.` *(repo root)*
+4. Click **Deploy site**.
+
+Netlify will serve `index.html` at your site URL. The page embeds the live
+Streamlit app via iframe and links directly to the Streamlit Community Cloud
+deployment.
 
 ---
 
