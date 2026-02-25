@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nylaris Signal Engine — Sreehari Karthikeyan</title>
+  <meta name="description"
+        content="A quantitative stock-scoring engine that ranks equities using trend, momentum, sentiment, and fundamental signals." />
+
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0e1117;
+      --surface:   #1a1f2e;
+      --accent:    #4f8ef7;
+      --accent2:   #7c3aed;
+      --text:      #e8eaf0;
+      --muted:     #8b92a5;
+      --radius:    12px;
+      --shadow:    0 4px 24px rgba(0,0,0,.45);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────────── */
+    .page-wrapper {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── Header / hero ────────────────────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, var(--surface) 0%, #12172b 100%);
+      padding: 2.5rem 2rem 2rem;
+      text-align: center;
+      border-bottom: 1px solid rgba(79,142,247,.18);
+    }
+
+    header h1 {
+      font-size: clamp(1.6rem, 4vw, 2.6rem);
+      font-weight: 700;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -.5px;
+    }
+
+    header p.tagline {
+      margin-top: .6rem;
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 620px;
+      margin-inline: auto;
+      line-height: 1.55;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .6rem;
+      justify-content: center;
+      margin-top: 1.2rem;
+    }
+
+    .badge-row a {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: var(--surface);
+      border: 1px solid rgba(79,142,247,.25);
+      border-radius: 6px;
+      padding: .35rem .8rem;
+      font-size: .82rem;
+      color: var(--accent);
+      text-decoration: none;
+      transition: border-color .2s, background .2s;
+    }
+
+    .badge-row a:hover {
+      background: rgba(79,142,247,.12);
+      border-color: var(--accent);
+    }
+
+    /* ── Signals bar ──────────────────────────────────────────────────── */
+    .signals-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .8rem;
+      padding: 1.2rem 2rem;
+      background: var(--surface);
+    }
+
+    .signal-chip {
+      background: rgba(79,142,247,.08);
+      border: 1px solid rgba(79,142,247,.2);
+      border-radius: 999px;
+      padding: .3rem .9rem;
+      font-size: .82rem;
+      color: var(--muted);
+    }
+
+    .signal-chip strong { color: var(--text); }
+
+    /* ── Embed section ────────────────────────────────────────────────── */
+    .embed-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem 2rem 2rem;
+      max-width: 1400px;
+      width: 100%;
+      margin-inline: auto;
+    }
+
+    .embed-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: .8rem;
+      margin-bottom: 1rem;
+    }
+
+    .embed-header h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .open-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      font-size: .88rem;
+      font-weight: 600;
+      text-decoration: none;
+      padding: .45rem 1.1rem;
+      border-radius: 8px;
+      transition: opacity .2s;
+    }
+
+    .open-btn:hover { opacity: .88; }
+
+    .iframe-container {
+      flex: 1;
+      min-height: 680px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(79,142,247,.15);
+      background: #fff;
+    }
+
+    .iframe-container iframe {
+      width: 100%;
+      height: 100%;
+      min-height: 680px;
+      border: none;
+      display: block;
+    }
+
+    /* Fallback message shown when the iframe cannot load */
+    .iframe-fallback {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      min-height: 680px;
+      gap: 1rem;
+      color: var(--muted);
+      font-size: .95rem;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .iframe-fallback a {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 1.2rem 2rem;
+      font-size: .8rem;
+      color: var(--muted);
+      border-top: 1px solid rgba(255,255,255,.06);
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── Responsive tweaks ────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .embed-section { padding: 1rem; }
+      .iframe-container, .iframe-container iframe { min-height: 520px; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrapper">
+
+  <!-- ── Header ──────────────────────────────────────────────────────── -->
+  <header>
+    <h1>📈 Nylaris Signal Engine</h1>
+    <p class="tagline">
+      A quantitative stock-scoring engine that ranks equities using trend,
+      momentum, sentiment, and fundamental signals — with a live interactive dashboard.
+    </p>
+    <div class="badge-row">
+      <a href="https://github.com/SreehariKarthikeyan/alphastack" target="_blank" rel="noopener">
+        <!-- GitHub icon (inline SVG) -->
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.014-1.703-2.782.604-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.607.069-.607 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+        </svg>
+        View on GitHub
+      </a>
+      <a href="https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py"
+         target="_blank" rel="noopener">
+        <img src="https://static.streamlit.io/badges/streamlit_badge_black_white.svg"
+             alt="Open in Streamlit" height="20" style="vertical-align:middle" />
+      </a>
+    </div>
+  </header>
+
+  <!-- ── Signal chips ─────────────────────────────────────────────────── -->
+  <div class="signals-bar" role="list" aria-label="Signal categories">
+    <span class="signal-chip" role="listitem"><strong>Trend</strong> — SMA crossover · ATR regime</span>
+    <span class="signal-chip" role="listitem"><strong>Momentum</strong> — RSI · 3 m / 6 m return</span>
+    <span class="signal-chip" role="listitem"><strong>Sentiment</strong> — News score aggregation</span>
+    <span class="signal-chip" role="listitem"><strong>Fundamentals</strong> — P/E · P/B · debt ratios</span>
+    <span class="signal-chip" role="listitem"><strong>Composite</strong> — Weighted ranking (0 → 1)</span>
+  </div>
+
+  <!-- ── Embedded dashboard ───────────────────────────────────────────── -->
+  <main class="embed-section">
+    <div class="embed-header">
+      <h2>Live Dashboard</h2>
+      <a class="open-btn"
+         href="https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py"
+         target="_blank" rel="noopener">
+        ↗ Open full screen
+      </a>
+    </div>
+
+    <div class="iframe-container" id="iframe-wrap">
+      <iframe
+        id="streamlit-frame"
+        src="https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py"
+        title="Nylaris Signal Engine — interactive stock scoring dashboard"
+        loading="lazy"
+        allow="clipboard-read; clipboard-write"
+      ></iframe>
+
+      <!-- Shown via JS if the iframe fails to load -->
+      <div class="iframe-fallback" id="iframe-fallback" aria-live="polite">
+        <p>The embedded dashboard could not be loaded.</p>
+        <p>
+          <a href="https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py"
+             target="_blank" rel="noopener">
+            Open the Nylaris Signal Engine directly →
+          </a>
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── Footer ───────────────────────────────────────────────────────── -->
+  <footer>
+    Built with
+    <a href="https://streamlit.io" target="_blank" rel="noopener">Streamlit</a>
+    ·
+    <a href="https://github.com/SreehariKarthikeyan/alphastack" target="_blank" rel="noopener">Source on GitHub</a>
+    ·
+    Hosted on <a href="https://www.netlify.com" target="_blank" rel="noopener">Netlify</a>
+  </footer>
+
+</div><!-- .page-wrapper -->
+
+<script>
+  // If the iframe fires an error event (e.g. refused to connect),
+  // hide it and show the fallback link instead.
+  (function () {
+    var frame = document.getElementById("streamlit-frame");
+    var fallback = document.getElementById("iframe-fallback");
+
+    frame.addEventListener("error", function () {
+      frame.style.display = "none";
+      fallback.style.display = "flex";
+    });
+  })();
+</script>
+</body>
+</html>

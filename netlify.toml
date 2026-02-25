@@ -1,0 +1,27 @@
+# Netlify configuration for the Nylaris Signal Engine portfolio page.
+# The static landing page (index.html) is served from the repo root.
+# The live Streamlit app is embedded via an <iframe> pointing to Streamlit Cloud.
+
+[build]
+  publish = "."          # serve files from the repo root
+
+[build.environment]
+  NODE_VERSION = "18"   # not needed for pure-static; kept for Netlify plugin compat
+
+# Security / performance headers applied to every response
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # frame-ancestors replaces the older X-Frame-Options header.
+    # 'self' prevents this portfolio page from being embedded on other origins
+    # while still allowing index.html to embed the Streamlit Cloud app via <iframe>.
+    Content-Security-Policy = "frame-ancestors 'self'"
+    X-Content-Type-Options  = "nosniff"
+    Referrer-Policy         = "strict-origin-when-cross-origin"
+    Permissions-Policy      = "camera=(), microphone=(), geolocation=()"
+
+# Friendly redirect: /app  →  Streamlit Cloud deployment
+[[redirects]]
+  from   = "/app"
+  to     = "https://share.streamlit.io/SreehariKarthikeyan/alphastack/main/streamlit_app.py"
+  status = 302
