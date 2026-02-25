@@ -1,11 +1,11 @@
 """
 main.py
 -------
-Nylaris – Phase 1 Signal Engine  (CLI entry point)
+Nylaris – Phase 1.5 Signal Engine  (CLI entry point)
 
 Usage
 -----
-  # Full pipeline: ingest → signals → score → backtest
+  # Full pipeline: ingest → signals → score → backtest → diagnostics
   python -m nylaris.main --run all
 
   # Ingest market data only
@@ -19,6 +19,9 @@ Usage
 
   # Print today's ranked snapshot
   python -m nylaris.main --run snapshot
+
+  # Run distribution diagnostics
+  python -m nylaris.main --run diagnostics
 
 Options
 -------
@@ -43,11 +46,11 @@ import pandas as pd
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="nylaris",
-        description="Nylaris Phase-1 Signal Engine",
+        description="Nylaris Phase-1.5 Signal Engine",
     )
     p.add_argument(
         "--run",
-        choices=["all", "ingest", "signals", "backtest", "snapshot"],
+        choices=["all", "ingest", "signals", "backtest", "snapshot", "diagnostics"],
         default="all",
         help="Pipeline stage to execute (default: all)",
     )
@@ -124,7 +127,12 @@ def run_composite(df: pd.DataFrame, mode: str) -> pd.DataFrame:
 
 
 def run_backtest(df: pd.DataFrame) -> None:
-    from nylaris.backtest.engine import run_backtest as _run, print_backtest_report
+    from nylaris.backtest.engine import (
+        run_backtest as _run,
+        print_backtest_report,
+        run_regime_backtest,
+        print_regime_report,
+    )
 
     print("\n[backtest] Running rolling backtest …")
     results = _run(
@@ -133,15 +141,45 @@ def run_backtest(df: pd.DataFrame) -> None:
     )
     print_backtest_report(results)
 
+    # Regime breakdown
+    regime_results = run_regime_backtest(results)
+    print_regime_report(regime_results)
 
-def run_snapshot(df: pd.DataFrame) -> None:
+
+def run_snapshot(df: pd.DataFrame, mode: str = "phase1") -> None:
     from nylaris.scoring.composite import build_snapshot, save_snapshot
+    from nylaris.scoring.history import save_daily_snapshot
+    from nylaris.scoring.contributions import compute_contributions_table
+
+    # Persist score history
+    n_saved = save_daily_snapshot(df)
+    print(f"\n[history] Saved {n_saved} rows to score history DB.")
 
     snap = build_snapshot(df)
     path = save_snapshot(snap)
-    print(f"\nSnapshot saved → {path}\n")
-    print(snap.to_string(index=False))
+    print(f"[snapshot] Saved → {path}\n")
+
+    # Show ranked table with deltas and percentiles
+    display_cols = ["ticker", "composite_score", "rank", "percentile_bucket"]
+    optional = ["score_change_7d", "score_change_30d"]
+    for c in optional:
+        if c in snap.columns and snap[c].notna().any():
+            display_cols.append(c)
+    print(snap[display_cols].to_string(index=False))
     print()
+
+    # Feature contributions
+    print("[contributions] Feature breakdown:")
+    contrib = compute_contributions_table(snap, mode=mode)
+    print(contrib.to_string(index=False))
+    print()
+
+
+def run_diagnostics(df: pd.DataFrame) -> None:
+    from nylaris.scoring.diagnostics import run_diagnostics as _diag, print_diagnostics
+
+    diag = _diag(df)
+    print_diagnostics(diag)
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +205,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print("ERROR: No cached market data found. Run with --run ingest first.")
                 return 1
 
-        if stage in ("all", "signals", "backtest", "snapshot"):
+        if stage in ("all", "signals", "backtest", "snapshot", "diagnostics"):
             df = run_signals(market_df, mode)
             df = run_composite(df, mode)
         else:
@@ -177,7 +215,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             run_backtest(df)
 
         if stage in ("all", "snapshot"):
-            run_snapshot(df)
+            run_snapshot(df, mode=mode)
+
+        if stage in ("all", "diagnostics"):
+            run_diagnostics(df)
 
     except KeyboardInterrupt:
         print("\nInterrupted.")

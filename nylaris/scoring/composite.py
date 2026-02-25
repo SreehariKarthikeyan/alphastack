@@ -34,6 +34,20 @@ def _ensure_dirs() -> None:
     SCORING_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _percentile_bucket(pct: float) -> str:
+    """Convert a percentile value to a human-readable bucket label."""
+    if pct >= 90:
+        return "Top 10%"
+    elif pct >= 75:
+        return "Top 25%"
+    elif pct >= 50:
+        return "Top 50%"
+    elif pct >= 25:
+        return "Bottom 50%"
+    else:
+        return "Bottom 25%"
+
+
 # ---------------------------------------------------------------------------
 # Volatility penalty
 # ---------------------------------------------------------------------------
@@ -110,7 +124,8 @@ def build_snapshot(df: pd.DataFrame) -> pd.DataFrame:
     matching the schema:
 
       ticker, trend_score, momentum_score, fundamental_score,
-      sentiment_score, volatility_regime, earnings_days, composite_score
+      sentiment_score, volatility_regime, earnings_days, composite_score,
+      rank, rank_percentile, percentile_bucket
     """
     latest = df.sort_values("date").groupby("ticker").last().reset_index()
 
@@ -131,7 +146,28 @@ def build_snapshot(df: pd.DataFrame) -> pd.DataFrame:
     # earnings_days is a placeholder (would require earnings calendar API)
     latest["earnings_days"] = None
 
-    return latest[cols + ["earnings_days"]].sort_values("composite_score", ascending=False).reset_index(drop=True)
+    # --- Percentile ranking ---
+    latest = latest.sort_values("composite_score", ascending=False).reset_index(drop=True)
+    n = len(latest)
+    latest["rank"] = range(1, n + 1)
+    latest["rank_percentile"] = latest["rank"].apply(
+        lambda r: round((1.0 - (r - 1) / max(n, 1)) * 100, 1)
+    )
+    latest["percentile_bucket"] = latest["rank_percentile"].apply(_percentile_bucket)
+
+    # --- Score deltas (requires history DB) ---
+    try:
+        from nylaris.scoring.history import compute_score_deltas
+        latest = compute_score_deltas(latest, windows=[7, 30])
+    except Exception:
+        latest["score_change_7d"] = None
+        latest["score_change_30d"] = None
+
+    out_cols = cols + [
+        "earnings_days", "rank", "rank_percentile",
+        "percentile_bucket", "score_change_7d", "score_change_30d",
+    ]
+    return latest[[c for c in out_cols if c in latest.columns]]
 
 
 def save_snapshot(snapshot: pd.DataFrame, date_label: Optional[str] = None) -> Path:

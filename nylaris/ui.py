@@ -157,7 +157,7 @@ run_button = st.sidebar.button(
 # ---------------------------------------------------------------------------
 
 st.title("📈 Nylaris Signal Engine")
-st.caption("Phase-1 stock scoring dashboard — trend · momentum · composite rank")
+st.caption("Phase-1.5 stock scoring dashboard — trend · momentum · composite rank · signal validation")
 
 # ---------------------------------------------------------------------------
 # Pipeline execution
@@ -248,13 +248,41 @@ if st.session_state.snapshot is not None:
     st.subheader("🏆 Ranked Snapshot")
     st.caption("Latest-date scores for each ticker, sorted by composite score (highest first)")
 
-    score_cols = [c for c in ["composite_score", "trend_score", "momentum_score",
-                               "sentiment_score", "fundamental_score"] if c in snap.columns]
+    # Allow sorting by composite or 7d improvement
+    sort_option = st.radio(
+        "Sort by",
+        ["Composite Score", "7d Improvement"],
+        horizontal=True,
+    )
+    if sort_option == "7d Improvement" and "score_change_7d" in snap.columns:
+        snap_sorted = snap.sort_values("score_change_7d", ascending=False, na_position="last")
+    else:
+        snap_sorted = snap.sort_values("composite_score", ascending=False)
 
-    display = snap[["ticker"] + score_cols + ["volatility_regime"]].copy()
+    score_cols = [c for c in ["composite_score", "trend_score", "momentum_score",
+                               "sentiment_score", "fundamental_score"] if c in snap_sorted.columns]
+
+    display_cols = ["ticker"]
+    # Add rank + percentile if available
+    for c in ["rank", "percentile_bucket"]:
+        if c in snap_sorted.columns:
+            display_cols.append(c)
+    display_cols += score_cols
+    # Add score deltas if available
+    for c in ["score_change_7d", "score_change_30d"]:
+        if c in snap_sorted.columns:
+            display_cols.append(c)
+    display_cols.append("volatility_regime")
+
+    display = snap_sorted[[c for c in display_cols if c in snap_sorted.columns]].copy()
 
     for col in score_cols:
         display[col] = display[col].apply(lambda v: f"{v:.3f}" if pd.notna(v) else "—")
+    for col in ["score_change_7d", "score_change_30d"]:
+        if col in display.columns:
+            display[col] = display[col].apply(
+                lambda v: f"{v:+.3f}" if pd.notna(v) else "—"
+            )
 
     st.dataframe(
         display,
@@ -381,6 +409,175 @@ if st.session_state.snapshot is not None:
                 st.plotly_chart(fig2, use_container_width=True)
             except ImportError:
                 st.line_chart(ticker_df.set_index("date")["composite_score"])
+
+        # --- Feature Contribution Breakdown ---
+        st.markdown(f"**{selected} — Score Contribution Breakdown**")
+        try:
+            from nylaris.scoring.contributions import compute_contributions
+            sel_row = snap[snap["ticker"] == selected].iloc[0]
+            _mode = mode if not demo_mode else "phase1"
+            contrib = compute_contributions(sel_row, mode=_mode)
+            contrib_display = {k: v for k, v in contrib.items() if k != "total"}
+            import plotly.graph_objects as go
+            fig_c = go.Figure(go.Bar(
+                x=list(contrib_display.values()),
+                y=[k.replace("_", " ").title() for k in contrib_display.keys()],
+                orientation="h",
+                marker_color=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"],
+            ))
+            fig_c.update_layout(
+                xaxis_title="Contribution to Composite",
+                height=220,
+                margin=dict(l=0, r=0, t=10, b=0),
+            )
+            st.plotly_chart(fig_c, use_container_width=True)
+        except Exception:
+            pass
+
+    # -------------------------------------------------------------------
+    # Backtest Results
+    # -------------------------------------------------------------------
+    st.subheader("📊 Backtest Results")
+    st.caption("Rolling monthly-rebalance backtest: top-3 stocks vs bottom-3 vs benchmark")
+
+    try:
+        from nylaris.backtest.engine import run_backtest as _bt_run, run_regime_backtest
+
+        full_df_bt: pd.DataFrame = st.session_state.scored_df
+        bt_results = _bt_run(
+            scored_df=full_df_bt[["date", "ticker", "composite_score"]],
+            price_df=full_df_bt[["date", "ticker", "close"]],
+        )
+
+        # Metrics row
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Strategy CAGR", f"{bt_results['cagr']:.1%}")
+        m2.metric("Max Drawdown", f"{bt_results['max_drawdown']:.1%}")
+        m3.metric("Sharpe Ratio", f"{bt_results['sharpe']:.2f}")
+        m4.metric("Win Rate", f"{bt_results['win_rate']:.0%}")
+
+        m5, m6, m7 = st.columns(3)
+        m5.metric("Top-3 CAGR", f"{bt_results.get('top3_cagr', float('nan')):.1%}")
+        m6.metric("Bottom-3 CAGR", f"{bt_results.get('bottom3_cagr', float('nan')):.1%}")
+        ds = bt_results.get('decile_spread', float('nan'))
+        m7.metric("Decile Spread", f"{ds:.2%}" if pd.notna(ds) and ds == ds else "N/A")
+
+        # Equity curve
+        try:
+            import plotly.graph_objects as go
+            port_cum = (1 + bt_results["portfolio_returns"]).cumprod()
+            fig_eq = go.Figure()
+            fig_eq.add_trace(go.Scatter(
+                x=port_cum.index, y=port_cum.values,
+                mode="lines", name="Top-3 Strategy",
+                line=dict(color="#1f77b4"),
+            ))
+            if not bt_results["bottom_returns"].empty:
+                bot_cum = (1 + bt_results["bottom_returns"]).cumprod()
+                fig_eq.add_trace(go.Scatter(
+                    x=bot_cum.index, y=bot_cum.values,
+                    mode="lines", name="Bottom-3",
+                    line=dict(color="#d62728", dash="dash"),
+                ))
+            if not bt_results["benchmark_returns"].empty:
+                bench_cum = (1 + bt_results["benchmark_returns"]).cumprod()
+                fig_eq.add_trace(go.Scatter(
+                    x=bench_cum.index, y=bench_cum.values,
+                    mode="lines", name="SPY Benchmark",
+                    line=dict(color="#7f7f7f", dash="dot"),
+                ))
+            fig_eq.update_layout(
+                yaxis_title="Growth of $1",
+                xaxis_title="Date",
+                height=350,
+                margin=dict(l=0, r=0, t=10, b=0),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            )
+            st.plotly_chart(fig_eq, use_container_width=True)
+        except ImportError:
+            st.line_chart((1 + bt_results["portfolio_returns"]).cumprod())
+
+        # Regime breakdown
+        regime_results = run_regime_backtest(bt_results)
+        if regime_results:
+            st.markdown("**Performance by Market Regime**")
+            regime_rows = []
+            for regime, metrics in regime_results.items():
+                regime_rows.append({
+                    "Regime": regime.replace("_", " ").title(),
+                    "Days": metrics["n_days"],
+                    "CAGR": f"{metrics['cagr']:.1%}" if pd.notna(metrics['cagr']) else "—",
+                    "Max DD": f"{metrics['max_drawdown']:.1%}" if pd.notna(metrics['max_drawdown']) else "—",
+                    "Sharpe": f"{metrics['sharpe']:.2f}" if pd.notna(metrics['sharpe']) else "—",
+                    "Win Rate": f"{metrics['win_rate']:.0%}" if pd.notna(metrics['win_rate']) else "—",
+                })
+            st.dataframe(pd.DataFrame(regime_rows), use_container_width=True, hide_index=True)
+    except Exception as exc:
+        st.warning(f"Backtest could not run: {exc}")
+
+    # -------------------------------------------------------------------
+    # Distribution Diagnostics
+    # -------------------------------------------------------------------
+    st.subheader("🔬 Distribution Diagnostics")
+    st.caption("Statistical properties of the scoring engine")
+
+    try:
+        from nylaris.scoring.diagnostics import run_diagnostics as _run_diag
+
+        diag = _run_diag(st.session_state.scored_df)
+        stats = diag["statistics"]
+
+        d1, d2, d3, d4 = st.columns(4)
+        d1.metric("Mean", f"{stats['mean']:.4f}")
+        d2.metric("Std Dev", f"{stats['std']:.4f}")
+        d3.metric("Skewness", f"{stats['skewness']:.4f}")
+        d4.metric("Median", f"{stats['median']:.4f}")
+
+        # Correlation heatmap
+        if diag["correlation"]:
+            st.markdown("**Feature Correlation Matrix**")
+            corr_df = pd.DataFrame(diag["correlation"])
+            try:
+                import plotly.figure_factory as ff
+                labels = list(corr_df.columns)
+                fig_corr = ff.create_annotated_heatmap(
+                    z=corr_df.values.round(2).tolist(),
+                    x=labels, y=labels,
+                    colorscale="RdBu_r",
+                    showscale=True,
+                )
+                fig_corr.update_layout(height=350, margin=dict(l=0, r=0, t=30, b=0))
+                st.plotly_chart(fig_corr, use_container_width=True)
+            except ImportError:
+                st.dataframe(corr_df.round(2), use_container_width=True)
+
+        # Warnings
+        if diag["dominance"]:
+            for feat, r in diag["dominance"]:
+                st.warning(f"⚠ **{feat}** dominates composite (r = {r:.3f}). Consider rebalancing weights.")
+        else:
+            st.success("✓ No single feature dominates the composite score.")
+
+        if diag["redundancy"]:
+            for a, b, r in diag["redundancy"]:
+                st.warning(f"⚠ Redundant pair: **{a}** ↔ **{b}** (r = {r:.3f})")
+        else:
+            st.success("✓ No redundant feature pairs detected.")
+    except Exception as exc:
+        st.warning(f"Diagnostics error: {exc}")
+
+    # -------------------------------------------------------------------
+    # Feature Contribution Table (all tickers)
+    # -------------------------------------------------------------------
+    st.subheader("🧩 Feature Contributions")
+    st.caption("Weighted contribution of each signal to the composite score")
+    try:
+        from nylaris.scoring.contributions import compute_contributions_table
+        _mode = mode if not demo_mode else "phase1"
+        contrib_table = compute_contributions_table(snap, mode=_mode)
+        st.dataframe(contrib_table, use_container_width=True, hide_index=True)
+    except Exception as exc:
+        st.warning(f"Contributions error: {exc}")
 
 else:
     if not demo_mode:
