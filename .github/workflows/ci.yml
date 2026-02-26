@@ -22,10 +22,15 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt && pip install -e .
 
       - name: Check syntax
         run: find . -name "*.py" -not -path "./.venv/*" -exec python -m py_compile {} +
 
       - name: Verify imports
-        run: python -c "import nylaris.ui; import nylaris.main"
+        run: |
+          # Check CLI module imports cleanly (no Streamlit runtime needed)
+          python -c "import nylaris.main; print('nylaris.main OK')"
+          # Check Streamlit UI and entry-point syntax without executing Streamlit calls
+          python -m py_compile nylaris/ui.py streamlit_app.py
+          echo "Syntax check OK"

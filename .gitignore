@@ -3,6 +3,11 @@ __pycache__/
 *.py[cod]
 *.pyo
 
+# Package build artifacts
+*.egg-info/
+dist/
+build/
+
 # Data cache (generated at runtime)
 nylaris_data/
 
