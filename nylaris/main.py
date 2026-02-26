@@ -34,7 +34,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 from typing import List, Optional
+
+# Ensure the repo root is on sys.path so `nylaris.*` imports work whether
+# this file is run as `python nylaris/main.py`, `python -m nylaris.main`,
+# or `streamlit run nylaris/main.py`.
+_HERE = Path(__file__).resolve().parent
+_ROOT = _HERE.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import pandas as pd
 
