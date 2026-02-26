@@ -212,12 +212,24 @@ if "scored_df" not in st.session_state:
     st.session_state.scored_df = None
 if "snapshot" not in st.session_state:
     st.session_state.snapshot = None
+if "is_demo_data" not in st.session_state:
+    st.session_state.is_demo_data = False
+if "bt_results" not in st.session_state:
+    st.session_state.bt_results = None
+if "diag" not in st.session_state:
+    st.session_state.diag = None
 
 if demo_mode:
-    # Auto-load demo data immediately — no button click required
-    demo_df = _generate_demo_data()
-    st.session_state.scored_df = demo_df
-    st.session_state.snapshot = _build_snapshot(demo_df)
+    # Only (re)load demo data when switching into demo mode for the first time.
+    # Skipping this on every rerun avoids expensive recomputation on each
+    # widget interaction.
+    if not st.session_state.is_demo_data or st.session_state.scored_df is None:
+        demo_df = _generate_demo_data()
+        st.session_state.scored_df = demo_df
+        st.session_state.snapshot = _build_snapshot(demo_df)
+        st.session_state.is_demo_data = True
+        st.session_state.bt_results = None
+        st.session_state.diag = None
     st.sidebar.success("Demo data loaded ✓")
 elif run_button:
     with st.spinner("Running pipeline… this may take a minute on first run."):
@@ -228,6 +240,9 @@ elif run_button:
             else:
                 st.session_state.scored_df = df
                 st.session_state.snapshot = _build_snapshot(df)
+                st.session_state.is_demo_data = False
+                st.session_state.bt_results = None
+                st.session_state.diag = None
                 st.success(f"Pipeline complete — {df['ticker'].nunique()} tickers processed.")
         except Exception as exc:
             st.error(f"Pipeline error: {exc}")
@@ -443,11 +458,13 @@ if st.session_state.snapshot is not None:
     try:
         from nylaris.backtest.engine import run_backtest as _bt_run, run_regime_backtest
 
-        full_df_bt: pd.DataFrame = st.session_state.scored_df
-        bt_results = _bt_run(
-            scored_df=full_df_bt[["date", "ticker", "composite_score"]],
-            price_df=full_df_bt[["date", "ticker", "close"]],
-        )
+        if st.session_state.bt_results is None:
+            full_df_bt = st.session_state.scored_df
+            st.session_state.bt_results = _bt_run(
+                scored_df=full_df_bt[["date", "ticker", "composite_score"]],
+                price_df=full_df_bt[["date", "ticker", "close"]],
+            )
+        bt_results = st.session_state.bt_results
 
         # Metrics row
         m1, m2, m3, m4 = st.columns(4)
@@ -524,7 +541,9 @@ if st.session_state.snapshot is not None:
     try:
         from nylaris.scoring.diagnostics import run_diagnostics as _run_diag
 
-        diag = _run_diag(st.session_state.scored_df)
+        if st.session_state.diag is None:
+            st.session_state.diag = _run_diag(st.session_state.scored_df)
+        diag = st.session_state.diag
         stats = diag["statistics"]
 
         d1, d2, d3, d4 = st.columns(4)
