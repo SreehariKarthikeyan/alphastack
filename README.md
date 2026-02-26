@@ -118,6 +118,47 @@ alphastack/
 
 ---
 
+## Free Hosting with Streamlit Community Cloud
+
+GitHub does **not** host Python/Streamlit apps directly, but
+[**Streamlit Community Cloud**](https://streamlit.io/cloud) is **completely free** and
+deploys straight from your GitHub repository with no server management needed.
+
+### Deploy in 3 steps
+
+1. **Push to GitHub** — make sure your code is on the `main` branch of a public (or
+   private) GitHub repository.
+
+2. **Sign in to Streamlit Community Cloud** — go to
+   [share.streamlit.io](https://share.streamlit.io) and click **"Sign in with GitHub"**.
+
+3. **Create a new app** — click **"New app"** and fill in:
+
+   | Field | Value |
+   |-------|-------|
+   | Repository | `<your-github-username>/alphastack` |
+   | Branch | `main` |
+   | Main file path | `streamlit_app.py` |
+
+   Click **"Deploy!"** — your app will be live at a public URL within a minute.
+
+### How it works
+
+Streamlit Community Cloud reads `requirements.txt` to install dependencies and runs
+`streamlit_app.py` as the entry point.  Every `git push` to `main` triggers an
+automatic redeploy.
+
+A `.streamlit/config.toml` file is included in this repo with the recommended cloud
+settings (`headless = true`, CORS disabled).
+
+### Continuous Integration (GitHub Actions)
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) is included.  On every push or
+pull request to `main` it installs dependencies, checks syntax, and verifies imports —
+so broken code is caught before it reaches the live deployment.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
